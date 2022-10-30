@@ -1,22 +1,26 @@
-from scipy.integrate import odeint
+import numpy as np
 
 
 class BaseSIRModel:
-    def __init__(self, SIRParams, time, population, beta, gamma):
-        self.SIR = SIRParams # Вид данных - [S, I, R]
+    def __init__(self, SIRParams, time, dt, population, beta, gamma):
+        self.S = np.zeros(time, dtype=int)
+        self.I = np.zeros(time, dtype=int)
+        self.R = np.zeros(time, dtype=int)
+        self.S[0] = SIRParams[0]
+        self.I[0] = SIRParams[1]
+        self.R[0] = SIRParams[2]
         self.time = time
+        self.dt = dt
         self.population = population
         self.beta = beta
         self.gamma = gamma
 
-    @staticmethod
-    def __derivativeModel(y, t, N, beta, gamma):
-        S, I, R = y
-        dSdT = - beta * S * I / N
-        dIdT = beta * S * I / N - gamma * I
-        dRdt = gamma * I
-        return dSdT, dIdT, dRdt
+    def simulationStep(self, i):
+        self.S[i] = self.S[i - 1] - self.beta * self.dt * self.I[i - 1] * self.S[i - 1] / self.population
+        self.I[i] = self.I[i - 1] + \
+                    self.dt * (self.beta * self.I[i - 1] * self.S[i - 1] / self.population - self.gamma * self.I[i - 1])
+        self.R[i] = self.population - self.S[i] - self.I[i]
 
-    def calculateModel(self):
-        modelData = odeint(BaseSIRModel.__derivativeModel, self.SIR, self.time, args=(self.population, self.beta, self.gamma))
-        return modelData.T
+    def runSimulation(self):
+        for i in range(1, self.time):
+            self.simulationStep(i)
