@@ -3,6 +3,11 @@ import numpy as np
 
 
 class MigrationSIR(BaseSIRModel):
+    def __init__(self, SIRParams, time, dt, population, beta, gamma):
+        super().__init__(SIRParams, time, dt, population, beta, gamma)
+        self.N = np.zeros(time, dtype=int)
+        self.N[0] = self.population
+
     def simulationStep(self, i, *migration):
         import copy
         # Структура миграции: (Theta, S, I)
@@ -15,3 +20,4 @@ class MigrationSIR(BaseSIRModel):
                                                self.gamma * self.I[i - 1]) + migrationData[1]
         self.population += migrationData[0] + migrationData[1]
         self.R[i] = self.population - self.S[i] - self.I[i]
+        self.N[i] = self.population
