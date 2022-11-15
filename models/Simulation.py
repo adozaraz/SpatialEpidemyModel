@@ -1,8 +1,10 @@
 import random
 
+import matplotlib.pyplot as plt
 import networkx as nx
 from models.MigrationSIR import MigrationSIR
 from Color import Color
+from UI.AnnoteFinder import AnnoteFinder
 
 
 class Simulation:
@@ -86,8 +88,10 @@ class Simulation:
 
         return data
 
-    def drawCities(self):
-
+    def drawCities(self, annoteFinder=False):
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        ax.set_title('select nodes to navigate there')
         pos = nx.spring_layout(self.graph)
         if self.simulationDone:
             colorMap = []
@@ -101,9 +105,18 @@ class Simulation:
             nx.draw(self.graph, pos, with_labels=True)
         labels = nx.get_edge_attributes(self.graph, 'weight')
         nx.draw_networkx_edge_labels(self.graph, pos, edge_labels=labels)
+        if annoteFinder:
+            x, y, annotes = [], [], []
+            for key in pos:
+                d = pos[key]
+                annotes.append(key)
+                x.append(d[0])
+                y.append(d[1])
+            af = AnnoteFinder(x, y, annotes, self)
+            fig.canvas.mpl_connect('button_press_event', af)
+        plt.show()
 
     def drawInfectionPlots(self):
-        import matplotlib.pyplot as plt
         plt.rcParams['figure.figsize'] = [15, 10]
         plt.rcParams['figure.dpi'] = 100
         fig, ax = plt.subplots(self.citiesNum)
@@ -124,10 +137,32 @@ class Simulation:
             legend.get_frame().set_alpha(0.5)
             for spine in ('top', 'right', 'bottom', 'left'):
                 ax[i].spines[spine].set_visible(False)
-        fig.tight_layout()
+        plt.show()
+
+    def drawInfectionPlot(self, key):
+        plt.rcParams['figure.figsize'] = [15, 10]
+        plt.rcParams['figure.dpi'] = 100
+        fig = plt.figure()
+        ax = fig.add_subplot(111, facecolor='#dddddd', axisbelow=True)
+        time = [i for i in range(self.time)]
+        S, I, R = self.graph.nodes[key]['data']
+        ax.plot(time, S, alpha=0.5, lw=2, label='Susceptible')
+        ax.plot(time, I, alpha=0.5, lw=2, label='Infected')
+        ax.plot(time, R, alpha=0.5, lw=2, label='Recovered')
+        ax.set_xlabel('Time /days')
+        ax.set_ylabel(f'Population in {key}')
+        ax.yaxis.set_tick_params(length=0)
+        ax.xaxis.set_tick_params(length=0)
+        ax.text(0, 0,
+                f"Beta = {self.graph.nodes[key]['model'].beta:.2f}\nGamma: {self.graph.nodes[key]['model'].gamma:.2f}")
+        ax.grid(visible=True, which='major', c='w', lw=2, ls='-')
+        legend = ax.legend()
+        legend.get_frame().set_alpha(0.5)
+        for spine in ('top', 'right', 'bottom', 'left'):
+            ax.spines[spine].set_visible(False)
+        plt.show()
 
     def drawOverallInfectionPlot(self):
-        import matplotlib.pyplot as plt
         import numpy as np
         plt.rcParams['figure.figsize'] = [12, 8]
         plt.rcParams['figure.dpi'] = 100
@@ -153,6 +188,7 @@ class Simulation:
         legend.get_frame().set_alpha(0.5)
         for spine in ('top', 'right', 'bottom', 'left'):
             ax.spines[spine].set_visible(False)
+        plt.show()
 
     def _update(self, frame):
         # Как делать градиент: получаем значение от 0 до 1, затем его
