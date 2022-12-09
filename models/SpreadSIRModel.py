@@ -1,5 +1,5 @@
 import numpy as np
-import matplotlib.pyplot as plt
+import cv2
 
 
 def calculateGradient(lower, current, upper, h):
@@ -7,199 +7,137 @@ def calculateGradient(lower, current, upper, h):
 
 
 class SpreadSIRModel:
-    def __init__(self, Time, GridSize, LengthX, I, population, beta, gamma, Ds, Di, Dr, LengthY=None, J=None,
-                 LengthZ=None, K=None):
+    def __init__(self, Time, dt, LengthX, dx, population, beta, gamma, Ds, Di, Dr, LengthY=None, dy=None,
+                 LengthZ=None, dz=None):
         # Model related variables
         self.population = population
         self.beta = beta
         self.gamma = gamma
         # Area and time related variables
-        self.ht = Time / GridSize
-        self.hx = 2 * LengthX / I
-        self.x = np.arange(-LengthX, LengthX, self.hx)
-        self.t = np.arange(0, Time, self.ht)
+        self.dt = dt
+        self.dx = dx
+        self.Time = Time
+        self.lengthX = LengthX
+        self.x = np.arange(0, LengthX, self.dx)
+        self.t = np.arange(0, Time, self.dt)
         self.shape = [self.t.shape[0], self.x.shape[0]]  # Structure: (T, X, [Y], [Z]) [] - not always present
-        if not (LengthY is None and J is None):
-            self.hy = 2 * LengthY / J
-            self.y = np.arange(-LengthY, LengthY, self.hy)
+        if not (LengthY is None and dy is None):
+            self.lengthY = LengthY
+            self.dy = dy
+            self.y = np.arange(0, LengthY, self.dy)
             self.shape.append(self.y.shape[0])
-            if not (LengthZ is None and K is None):
-                self.hz = 2 * LengthZ / K
-                self.z = np.arange(-LengthZ, LengthZ, self.hz)
+            if not (LengthZ is None and dz is None):
+                self.lengthZ = LengthZ
+                self.dz = dz
+                self.z = np.arange(0, LengthZ, self.dz)
                 self.shape.append(self.z.shape[0])
         # Dispersion related variables
         self.Ds = Ds
         self.Di = Di
         self.Dr = Dr
         # SIR Model variables
-        self.S = np.zeros(self.shape, dtype=np.float32)
-        self.I = np.zeros(self.shape, dtype=np.float32)
-        self.R = np.zeros(self.shape, dtype=np.float32)
-        self.sims = {1: self.run1DSimulation, 2: self.run2DSimulation, 3: self.run3DSimulation}
-        self.drawings = {1: self.draw1DSim, 2: self.draw2DSim, 3: self.draw3DSim}
+        self.S = np.zeros(self.shape, dtype=float)
+        self.I = np.zeros(self.shape, dtype=float)
+        self.R = np.zeros(self.shape, dtype=float)
+        self.sims = {2: self.run1D, 3: self.run2D, 4: self.run3D}
+        self.drawers = {2: self.draw1D, 3: self.draw2D, 4: self.draw3D}
 
     def runSimulation(self):
-        self.sims[len(self.shape[1:])]()
+        self.spreadPeople()
+        print(self.S[0].sum() + self.I[0].sum() + self.R[0].sum())
+        self.sims[len(self.shape)]()
 
-    def calculateS(self, lowerS, currentS, upperS, currentI, h, step):
-        # h structure: [t, x, y, z]
-        gradient = 0
-        for i in h[1:]:
-            gradient += calculateGradient(lowerS, currentS, upperS, i)
+    def spreadPeople(self):
+        self.S[0] = self.population * 0.9 * np.random.dirichlet(np.ones(self.shape[1:]))
+        self.I[0] = self.population * 0.1 * np.random.dirichlet(np.ones(self.shape[1:]))
 
-        return self.Ds(step * h[0]) * gradient * h[0] + currentS * h[0] * (1 - currentI ** 2)
+    def run1D(self):
+        for (i, t) in enumerate(self.t[1:], start=1):
+            for (j, x) in enumerate(self.x[1:], start=1):
+                if j >= self.x.shape[0] - 1:
+                    continue
+                self.S[i][j] = self.S[i - 1][j] + self.dS1D(i - 1, j) * self.dt
+                if self.S[i][j] < 0:
+                    self.S[i][j] = 0
+                self.I[i][j] = self.I[i - 1][j] + self.dI1d(i - 1, j) * self.dt
+                if self.I[i][j] < 0:
+                    self.I[i][j] = 0
+                self.R[i][j] = self.R[i - 1][j] + self.dR1d(i - 1, j) * self.dt
+                if self.R[i][j] < 0:
+                    self.R[i][j] = 0
 
-    def calculateI(self, lowerI, currentI, upperI, currentS, h, step):
-        gradient = 0
-        for i in h[1:]:
-            gradient += calculateGradient(lowerI, currentI, upperI, i)
-
-        return self.Di(step * h[0]) * gradient * h[0] + currentI * h[0] * (1 + currentI * currentS - self.gamma)
-
-    def calculateR(self, lowerR, currentR, upperR, currentI, h, step):
-        gradient = 0
-        for i in h[1:]:
-            gradient += calculateGradient(lowerR, currentR, upperR, i)
-
-        return self.Dr(step * h[0]) * gradient * h[0] + currentR * h[0] + self.gamma * currentI * h[0]
-
-    def run1DSimulation(self):
-        for step in range(1, self.shape[0]):
-            for i in range(1, self.shape[1] - 1):
-                self.S[step][i] = self.calculateS(self.S[step - 1][i - 1], self.S[step - 1][i], self.S[step - 1][i + 1],
-                                                  self.I[step - 1][i], [self.ht, self.hx], step)
-                self.I[step][i] = self.calculateI(self.I[step - 1][i - 1], self.I[step - 1][i], self.I[step - 1][i + 1],
-                                                  self.S[step - 1][i], [self.ht, self.hx], step)
-                self.R[step][i] = self.calculateR(self.R[step - 1][i - 1], self.R[step - 1][i], self.R[step - 1][i + 1],
-                                                  self.I[step - 1][i], [self.ht, self.hx], step)
-
-            # Conditions Sx=Ix=Rx=0
-            self.S[step][0] = self.calculateS(self.S[step - 1][1], self.S[step - 1][0], self.S[step - 1][1],
-                                              self.I[step - 1][0], [self.ht, self.hx], step)
-            self.I[step][0] = self.calculateI(self.I[step - 1][1], self.I[step - 1][0], self.I[step - 1][1],
-                                              self.S[step - 1][0], [self.ht, self.hx], step)
-            self.R[step][0] = self.calculateR(self.R[step - 1][1], self.R[step - 1][0], self.R[step - 1][1],
-                                              self.I[step - 1][0], [self.ht, self.hx], step)
-            self.S[step][-1] = self.calculateS(self.S[step - 1][-2], self.S[step - 1][-1], self.S[step - 1][-2],
-                                               self.I[step - 1][-1], [self.ht, self.hx], step)
-            self.I[step][-1] = self.calculateI(self.I[step - 1][-2], self.I[step - 1][-1], self.I[step - 1][-2],
-                                               self.S[step - 1][-1], [self.ht, self.hx], step)
-            self.R[step][-1] = self.calculateR(self.R[step - 1][-2], self.R[step - 1][-1], self.R[step - 1][-2],
-                                               self.I[step - 1][-1], [self.ht, self.hx], step)
-
-            if self.S[step].sum() + self.I[step].sum() + self.R[step].sum() != 1:
-                raise ValueError(f'SIR condition is not met. Step: {step}')
-
-    def run2DSimulation(self):
-        for step in range(1, self.shape[0]):
-            for j in range(self.shape[2]):
-                for i in range(1, self.shape[1] - 1):
-                    self.S[step][i] = self.calculateS(self.S[step - 1][j][i - 1], self.S[step - 1][j][i],
-                                                      self.S[step - 1][j][i + 1],
-                                                      self.I[step - 1][j][i], [self.ht, self.hx, self.hy], step)
-                    self.I[step][i] = self.calculateI(self.I[step - 1][j][i - 1], self.I[step - 1][j][i],
-                                                      self.I[step - 1][j][i + 1],
-                                                      self.S[step - 1][j][i], [self.ht, self.hx, self.hy], step)
-                    self.R[step][i] = self.calculateR(self.R[step - 1][j][i - 1], self.R[step - 1][j][i],
-                                                      self.R[step - 1][j][i + 1],
-                                                      self.I[step - 1][j][i], [self.ht, self.hx, self.hy], step)
-
-                    # Conditions Sx=Ix=Rx=0
-                self.S[step][0] = self.calculateS(self.S[step - 1][j][1], self.S[step - 1][j][0],
-                                                  self.S[step - 1][j][1],
-                                                  self.I[step - 1][j][0], [self.ht, self.hx, self.hy], step)
-                self.I[step][0] = self.calculateI(self.I[step - 1][j][1], self.I[step - 1][j][0],
-                                                  self.I[step - 1][j][1],
-                                                  self.S[step - 1][j][0], [self.ht, self.hx, self.hy], step)
-                self.R[step][0] = self.calculateR(self.R[step - 1][j][1], self.R[step - 1][j][0],
-                                                  self.R[step - 1][j][1],
-                                                  self.I[step - 1][j][0], [self.ht, self.hx, self.hy], step)
-                self.S[step][-1] = self.calculateS(self.S[step - 1][j][-2], self.S[step - 1][j][-1],
-                                                   self.S[step - 1][j][-2],
-                                                   self.I[step - 1][j][-1], [self.ht, self.hx, self.hy], step)
-                self.I[step][-1] = self.calculateI(self.I[step - 1][j][-2], self.I[step - 1][j][-1],
-                                                   self.I[step - 1][j][-2],
-                                                   self.S[step - 1][j][-1], [self.ht, self.hx, self.hy], step)
-                self.R[step][-1] = self.calculateR(self.R[step - 1][j][-2], self.R[step - 1][j][-1],
-                                                   self.R[step - 1][j][-2],
-                                                   self.I[step - 1][j][-1], [self.ht, self.hx, self.hy], step)
-
-    def run3DSimulation(self):
-        for step in range(1, self.shape[0]):
-            for k in range(self.shape[3]):
-                for j in range(self.shape[2]):
-                    for i in range(self.shape[1] - 1):
-                        self.S[step][i] = self.calculateS(self.S[step - 1][k][j][i - 1], self.S[step - 1][k][j][i],
-                                                          self.S[step - 1][k][j][i + 1],
-                                                          self.I[step - 1][k][j][i],
-                                                          [self.ht, self.hx, self.hy, self.hz], step)
-                        self.I[step][i] = self.calculateI(self.I[step - 1][k][j][i - 1], self.I[step - 1][k][j][i],
-                                                          self.I[step - 1][k][j][i + 1],
-                                                          self.S[step - 1][k][j][i],
-                                                          [self.ht, self.hx, self.hy, self.hz], step)
-                        self.R[step][i] = self.calculateR(self.R[step - 1][k][j][i - 1], self.R[step - 1][k][j][i],
-                                                          self.R[step - 1][k][j][i + 1],
-                                                          self.I[step - 1][k][j][i],
-                                                          [self.ht, self.hx, self.hy, self.hz], step)
-
-                        # Conditions Sx=Ix=Rx=0
-                    self.S[step][0] = self.calculateS(self.S[step - 1][k][j][1], self.S[step - 1][k][j][0],
-                                                      self.S[step - 1][k][j][1],
-                                                      self.I[step - 1][k][j][0], [self.ht, self.hx, self.hy, self.hz],
-                                                      step)
-                    self.I[step][0] = self.calculateI(self.I[step - 1][k][j][1], self.I[step - 1][k][j][0],
-                                                      self.I[step - 1][k][j][1],
-                                                      self.S[step - 1][k][j][0], [self.ht, self.hx, self.hy, self.hz],
-                                                      step)
-                    self.R[step][0] = self.calculateR(self.R[step - 1][k][j][1], self.R[step - 1][k][j][0],
-                                                      self.R[step - 1][k][j][1],
-                                                      self.I[step - 1][k][j][0], [self.ht, self.hx, self.hy, self.hz],
-                                                      step)
-                    self.S[step][-1] = self.calculateS(self.S[step - 1][k][j][-2], self.S[step - 1][k][j][-1],
-                                                       self.S[step - 1][k][j][-2],
-                                                       self.I[step - 1][k][j][-1], [self.ht, self.hx, self.hy, self.hz],
-                                                       step)
-                    self.I[step][-1] = self.calculateI(self.I[step - 1][k][j][-2], self.I[step - 1][k][j][-1],
-                                                       self.I[step - 1][k][j][-2],
-                                                       self.S[step - 1][k][j][-1], [self.ht, self.hx, self.hy, self.hz],
-                                                       step)
-                    self.R[step][-1] = self.calculateR(self.R[step - 1][k][j][-2], self.R[step - 1][k][j][-1],
-                                                       self.R[step - 1][k][j][-2],
-                                                       self.I[step - 1][k][j][-1], [self.ht, self.hx, self.hy, self.hz],
-                                                       step)
-
-    def spreadPeopleRandomly(self):
-        self.S[0] = 0.9 * np.random.dirichlet(np.ones(self.shape[1:]))
-        self.I[0] = 0.1 * np.random.dirichlet(np.ones(self.shape[1:]))
+            self.boundary1d(i - 1)
 
     def draw(self):
-        self.drawings[len(self.shape[1:])]()
+        self.drawers[len(self.shape)]()
 
-    def draw1DSim(self):
-        plt.plot(self.x, self.S[-1], label='Susceptible')
-        plt.plot(self.x, self.I[-1], label='Infected')
-        plt.plot(self.x, self.R[-1], label='Recovered')
-        plt.legend()
-        plt.show()
+    def draw1D(self):
+        # R - Recovered, G - Infected, B - Susceptible
+        print(self.I[-1].sum() + self.S[-1].sum() + self.R[-1].sum())
+        print(self.population - (self.I[-1].sum() + self.S[-1].sum() + self.R[-1].sum()))
+        Z = np.ndarray((self.shape[0], self.shape[1], 3))
+        for step, tmp in enumerate(self.t, start=0):
+            for coord, tmp in enumerate(self.x, start=0):
+                colormap = {self.S[step][coord]: np.uint8((255, 0, 0)),
+                            self.I[step][coord]: np.uint8((0, 255, 0)),
+                            self.R[step][coord]: np.uint8((0, 0, 255))}
+                Z[step][coord] = colormap[max(self.S[step][coord], self.I[step][coord], self.R[step][coord])]
 
-        plt.plot(self.t, self.S, label='Susceptible')
-        plt.plot(self.t, self.I, label='Infected')
-        plt.plot(self.t, self.R, label='Recovered')
-        plt.legend()
-        plt.show()
+        img = np.ndarray((self.shape[0] * 10, self.shape[1], 3))
+        for step in range(0, self.shape[0] * 10, 10):
+            for i in range(10):
+                if step + i >= self.shape[0]:
+                    break
+                img[step + i] = Z[step]
 
-        fig, ax = plt.subplots()
-        levelsS = np.linspace(self.S.min(initial=-999999), self.S.max(initial=0), 7)
-        levelsI = np.linspace(self.I.min(initial=-999999), self.I.max(initial=0), 7)
-        levelsR = np.linspace(self.R.min(initial=-999999), self.R.max(initial=0), 7)
-        ax.plot(self.x, self.t, 'o', markersize=2)
-        ax.tricontourf(self.t, self.x, self.S, levels=levelsS)
-        ax.tricontourf(self.t, self.x, self.I, levels=levelsI)
-        ax.tricontourf(self.t, self.x, self.R, levels=levelsR)
-        plt.show()
+        cv2.imshow("SIR", img)
+        cv2.waitKey()
 
-    def draw2DSim(self):
+    def draw2D(self):
         pass
 
-    def draw3DSim(self):
+    def draw3D(self):
         pass
+
+    def run2D(self):
+        pass
+
+    def run3D(self):
+        pass
+
+    def dS1D(self, i, j):
+        # i - Time, j - X
+        return self.Ds(self.dt) * (self.S[i][j - 1] + self.S[i][j + 1] - 2 * self.S[i][j]) / self.dx ** 2 - self.beta * \
+            self.S[i][j] * self.I[i][j] / self.population
+
+    def dI1d(self, i, j):
+        return self.Di(self.dt) * (self.I[i][j - 1] + self.I[i][j + 1] - 2 * self.I[i][j]) / self.dx ** 2 + self.beta * \
+            self.S[i][j] * self.I[i][j] / self.population - self.gamma * self.I[i][j]
+
+    def dR1d(self, i, j):
+        return self.Dr(self.dt) * (self.R[i][j - 1] + self.R[i][j + 1] - 2 * self.R[i][j]) / self.dx ** 2 + self.gamma * \
+            self.I[i][j]
+
+    def boundary1d(self, i):
+        self.S[i + 1][0] = self.Ds(self.dt) * (2 * self.S[i][1] - 2 * self.S[i][0]) / self.dx ** 2 - self.beta * \
+                           self.S[i][0] * self.I[i][0] / self.population
+        if self.S[i][0] < 0:
+            self.S[i][0] = 0
+        self.S[i + 1][-1] = self.Ds(self.dt) * (2 * self.S[i][-2] - 2 * self.S[i][-1]) / self.dx ** 2 - self.beta * \
+                            self.S[i][-1] * self.I[i][-1] / self.population
+        if self.S[i][-1] < 0:
+            self.S[i][-1] = 0
+
+        self.I[i + 1][0] = self.Di(self.dt) * (2 * self.I[i][1] - 2 * self.I[i][0]) / self.dx ** 2 + self.beta * \
+                           self.S[i][0] * self.I[i][0] / self.population - self.gamma * self.I[i][0]
+        if self.I[i][0] < 0:
+            self.I[i][0] = 0
+        self.I[i + 1][-1] = self.Di(self.dt) * (2 * self.I[i][-2] - 2 * self.I[i][-1]) / self.dx ** 2 + self.beta * \
+                            self.S[i][-1] * self.I[i][-1] / self.population - self.gamma * self.I[i][-1]
+        if self.I[i][-1] < 0:
+            self.I[i][-1] = 0
+
+        self.R[i + 1][0] = self.Dr(self.dt) * (2 * self.R[i][1] - 2 * self.R[i][0]) / self.dx ** 2 + self.gamma * \
+                           self.I[i][0]
+        self.R[i + 1][-1] = self.Dr(self.dt) * (2 * self.R[i][-2] - 2 * self.R[i][-1]) / self.dx ** 2 + self.gamma * \
+                            self.I[i][-1]
