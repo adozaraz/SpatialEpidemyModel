@@ -1,143 +1,170 @@
 import numpy as np
 import cv2
-
-
-def calculateGradient(lower, current, upper, h):
-    return (lower - 2 * current + upper) / (h ** 2)
+import skvideo.io
 
 
 class SpreadSIRModel:
-    def __init__(self, Time, dt, LengthX, dx, population, beta, gamma, Ds, Di, Dr, LengthY=None, dy=None,
-                 LengthZ=None, dz=None):
+    def __init__(self, Time, dt, beta, gamma, Ds, Di, Dr, dx, dy, population=None, grid=None):
         # Model related variables
+        self.X = None
+        self.Y = None
         self.population = population
         self.beta = beta
         self.gamma = gamma
         # Area and time related variables
         self.dt = dt
         self.dx = dx
+        self.dy = dy
         self.Time = Time
-        self.lengthX = LengthX
-        self.x = np.arange(0, LengthX, self.dx)
         self.t = np.arange(0, Time, self.dt)
-        self.shape = [self.t.shape[0], self.x.shape[0]]  # Structure: (T, X, [Y], [Z]) [] - not always present
-        if not (LengthY is None and dy is None):
-            self.lengthY = LengthY
-            self.dy = dy
-            self.y = np.arange(0, LengthY, self.dy)
-            self.shape.append(self.y.shape[0])
-            if not (LengthZ is None and dz is None):
-                self.lengthZ = LengthZ
-                self.dz = dz
-                self.z = np.arange(0, LengthZ, self.dz)
-                self.shape.append(self.z.shape[0])
         # Dispersion related variables
         self.Ds = Ds
         self.Di = Di
         self.Dr = Dr
         # SIR Model variables
-        self.S = np.zeros(self.shape, dtype=float)
-        self.I = np.zeros(self.shape, dtype=float)
-        self.R = np.zeros(self.shape, dtype=float)
-        self.sims = {2: self.run1D, 3: self.run2D, 4: self.run3D}
-        self.drawers = {2: self.draw1D, 3: self.draw2D, 4: self.draw3D}
+        self.grid = None
+        self.Sprev = None
+        self.Iprev = None
+        self.Rprev = None
+        self.Scur = None
+        self.Icur = None
+        self.Rcur = None
+
+    def loadImage(self, imagePath):
+        # R - Recovered, G - Infected, B - Susceptible
+        image = cv2.imread(imagePath)
+        self.X, self.Y = image.shape[:2]
+        self.grid = np.zeros((self.X, self.Y), dtype=np.float64)
+        self.Sprev = np.zeros((self.X, self.Y), dtype=np.float64)
+        self.Iprev = np.zeros((self.X, self.Y), dtype=np.float64)
+        self.Rprev = np.zeros((self.X, self.Y), dtype=np.float64)
+        self.Sprev[:, :] = image[:, :, 0] / 255
+        self.Iprev[:, :] = image[:, :, 1] / 255
+        self.Rprev[:, :] = image[:, :, 2] / 255
+        # for i in range(self.X):
+        #     for j in range(self.Y):
+        #         if np.array_equal(image[i, j], [0, 0, 255]):
+        #             self.grid[i, j] = 1
+        #             self.Rprev[i, j] = 1
+        #         elif np.array_equal(image[i, j], [0, 255, 0]):
+        #             self.grid[i, j] = 1
+        #             self.Iprev[i, j] = 1
+        #         elif np.array_equal(image[i, j], [255, 0, 0]):
+        #             self.grid[i, j] = 1
+        #             self.Sprev[i, j] = 1
+        self.grid = self.Sprev + self.Iprev + self.Rprev
+        self.population = np.sum(self.grid)
+        self.Scur = self.Sprev.copy()
+        self.Icur = self.Iprev.copy()
+        self.Rcur = self.Rprev.copy()
 
     def runSimulation(self):
-        self.spreadPeople()
-        print(self.S[0].sum() + self.I[0].sum() + self.R[0].sum())
-        self.sims[len(self.shape)]()
-
-    def spreadPeople(self):
-        self.S[0] = self.population * 0.9 * np.random.dirichlet(np.ones(self.shape[1:]))
-        self.I[0] = self.population * 0.1 * np.random.dirichlet(np.ones(self.shape[1:]))
-
-    def run1D(self):
-        for (i, t) in enumerate(self.t[1:], start=1):
-            for (j, x) in enumerate(self.x[1:], start=1):
-                if j >= self.x.shape[0] - 1:
-                    continue
-                self.S[i][j] = self.S[i - 1][j] + self.dS1D(i - 1, j) * self.dt
-                if self.S[i][j] < 0:
-                    self.S[i][j] = 0
-                self.I[i][j] = self.I[i - 1][j] + self.dI1d(i - 1, j) * self.dt
-                if self.I[i][j] < 0:
-                    self.I[i][j] = 0
-                self.R[i][j] = self.R[i - 1][j] + self.dR1d(i - 1, j) * self.dt
-                if self.R[i][j] < 0:
-                    self.R[i][j] = 0
-
-            self.boundary1d(i - 1)
-
-    def draw(self):
-        self.drawers[len(self.shape)]()
-
-    def draw1D(self):
-        # R - Recovered, G - Infected, B - Susceptible
-        print(self.I[-1].sum() + self.S[-1].sum() + self.R[-1].sum())
-        print(self.population - (self.I[-1].sum() + self.S[-1].sum() + self.R[-1].sum()))
-        Z = np.ndarray((self.shape[0], self.shape[1], 3))
-        for step, tmp in enumerate(self.t, start=0):
-            for coord, tmp in enumerate(self.x, start=0):
-                colormap = {self.S[step][coord]: np.uint8((255, 0, 0)),
-                            self.I[step][coord]: np.uint8((0, 255, 0)),
-                            self.R[step][coord]: np.uint8((0, 0, 255))}
-                Z[step][coord] = colormap[max(self.S[step][coord], self.I[step][coord], self.R[step][coord])]
-
-        img = np.ndarray((self.shape[0] * 10, self.shape[1], 3))
-        for step in range(0, self.shape[0] * 10, 10):
-            for i in range(10):
-                if step + i >= self.shape[0]:
-                    break
-                img[step + i] = Z[step]
-
-        cv2.imshow("SIR", img)
-        cv2.waitKey()
-
-    def draw2D(self):
-        pass
-
-    def draw3D(self):
-        pass
+        self.run2D()
 
     def run2D(self):
-        pass
+        img = np.zeros((self.grid.shape[0], self.grid.shape[1], 3))
+        frameWidth = self.grid.shape[0]
+        frameHeight = self.grid.shape[1]
+        img = img.reshape((frameWidth, frameHeight, 3))
+        frameSize = (frameWidth, frameHeight)
+        fps = 20
+        mask = self.grid != 0
+        # img[mask, 0] = np.uint8(self.Sprev[mask] / self.grid[mask] * 255)
+        # img[mask, 1] = np.uint8(self.Iprev[mask] / self.grid[mask] * 255)
+        # img[mask, 2] = np.uint8(self.Rprev[mask] / self.grid[mask] * 255)
+        img[mask, 1] = np.uint8(self.Iprev[mask] / self.grid[mask] * 255)
+        img[mask, 0] = np.uint8(self.Rprev[mask] / self.grid[mask] * 255)
+        img[mask, 2] = np.uint8(self.Sprev[mask] / self.grid[mask] * 255)
+        writer = skvideo.io.FFmpegWriter("SIRModel.mp4")
+        writer.writeFrame(img)
+        cv2.imwrite(f'data/SIR{0}.jpg', img)
+        for timeStep in range(self.Time):
+            self.Sprev = self.Scur.copy()
+            self.Iprev = self.Icur.copy()
+            self.Rprev = self.Rcur.copy()
+            S1 = self.Sprev[2:, 1:-1]  # S_{i+1, j}
+            S_1 = self.Sprev[:-2, 1:-1]  # S_{i-1, j}
+            Si1 = self.Sprev[1:-1, 2:]  # S_{i, j-1}
+            Si_1 = self.Sprev[1:-1, :-2]  # S_{i, j+1}
+            S = self.Sprev[1:-1, 1:-1]  # S_{i, k}
 
-    def run3D(self):
-        pass
+            I1 = self.Iprev[2:, 1:-1]  # I_{i+1, j}
+            I_1 = self.Iprev[:-2, 1:-1]  # I_{i-1, j}
+            Ii1 = self.Iprev[1:-1, 2:]  # I_{i, j-1}
+            Ii_1 = self.Iprev[1:-1, :-2]  # I_{i, j+1}
+            I = self.Iprev[1:-1, 1:-1]  # I_{i, k}
 
-    def dS1D(self, i, j):
-        # i - Time, j - X
-        return self.Ds(self.dt) * (self.S[i][j - 1] + self.S[i][j + 1] - 2 * self.S[i][j]) / self.dx ** 2 - self.beta * \
-            self.S[i][j] * self.I[i][j] / self.population
+            R1 = self.Rprev[2:, 1:-1]  # R_{i+1, j}
+            R_1 = self.Rprev[:-2, 1:-1]  # R_{i-1, j}
+            Ri1 = self.Rprev[1:-1, 2:]  # R_{i, j-1}
+            Ri_1 = self.Rprev[1:-1, :-2]  # R_{i, j+1}
+            R = self.Rprev[1:-1, 1:-1]  # R_{i, k}
+            self.Scur[1:-1, 1:-1] = self.Ds(self.dt * timeStep) * (
+                    (Si_1 + Si1 - 2 * S) / self.dx ** 2 + (
+                    S_1 + S1 - 2 * S) / self.dy ** 2) - self.beta * S * I + S
+            self.Icur[1:-1, 1:-1] = self.Di(self.dt * timeStep) * ((Ii_1 + Ii1 - 2 * I) / self.dx ** 2 + (
+                    I_1 + I1 - 2 * I) / self.dy ** 2) + self.beta * S * I - self.gamma * I + I
+            self.Rcur[1:-1, 1:-1] = self.Dr(self.dt * timeStep) * (
+                    (Ri_1 + Ri1 - 2 * R) / self.dx ** 2 + (R_1 + R1 - 2 * R) / self.dy ** 2) + self.gamma * I + R
 
-    def dI1d(self, i, j):
-        return self.Di(self.dt) * (self.I[i][j - 1] + self.I[i][j + 1] - 2 * self.I[i][j]) / self.dx ** 2 + self.beta * \
-            self.S[i][j] * self.I[i][j] / self.population - self.gamma * self.I[i][j]
+            self.Scur[self.Scur < 0] = 0
+            self.Icur[self.Icur < 0] = 0
+            self.Rcur[self.Rcur < 0] = 0
+            # for row in range(1, self.X - 1):
+            #     for col in range(1, self.Y - 1):
+            #         self.Scur[row, col] = self.dS2D(row, col, timeStep) * self.dt + self.Sprev[row, col]
+            #         if self.Scur[row, col] < 0:
+            #             self.Scur[row, col] = 0
+            #         self.Icur[row, col] = self.dI2d(row, col, timeStep) * self.dt + self.Iprev[row, col]
+            #         if self.Icur[row, col] < 0:
+            #             self.Icur[row, col] = 0
+            #         self.Rcur[row, col] = self.dR2d(row, col, timeStep) * self.dt + self.Rprev[row, col]
+            #         if self.Rcur[row, col] < 0:
+            #             self.Rcur[row, col] = 0
 
-    def dR1d(self, i, j):
-        return self.Dr(self.dt) * (self.R[i][j - 1] + self.R[i][j + 1] - 2 * self.R[i][j]) / self.dx ** 2 + self.gamma * \
-            self.I[i][j]
+            self.boundary2d()
+            self.grid = self.Scur + self.Icur + self.Rcur
+            mask = self.grid != 0
+            # img[mask, 0] = np.uint8(self.Scur[mask] / self.grid[mask] * 255)
+            # img[mask, 1] = np.uint8(self.Rcur[mask] / self.grid[mask] * 255)
+            # img[mask, 2] = np.uint8(self.Icur[mask] / self.grid[mask] * 255)
+            img[mask, 1] = np.uint8(self.Icur[mask] / self.grid[mask] * 255)
+            img[mask, 0] = np.uint8(self.Rcur[mask] / self.grid[mask] * 255)
+            img[mask, 2] = np.uint8(self.Scur[mask] / self.grid[mask] * 255)
+            # cv2.imwrite(f'data/SIR{timeStep}.jpg', img)
+            writer.writeFrame(img)
 
-    def boundary1d(self, i):
-        self.S[i + 1][0] = self.Ds(self.dt) * (2 * self.S[i][1] - 2 * self.S[i][0]) / self.dx ** 2 - self.beta * \
-                           self.S[i][0] * self.I[i][0] / self.population
-        if self.S[i][0] < 0:
-            self.S[i][0] = 0
-        self.S[i + 1][-1] = self.Ds(self.dt) * (2 * self.S[i][-2] - 2 * self.S[i][-1]) / self.dx ** 2 - self.beta * \
-                            self.S[i][-1] * self.I[i][-1] / self.population
-        if self.S[i][-1] < 0:
-            self.S[i][-1] = 0
+    def dS2D(self, row, col, timeStep):
+        return self.Ds(self.dt * timeStep) * (
+                (self.Sprev[row, col + 1] + self.Sprev[row, col - 1] - 2 * self.Sprev[row, col]) / self.dx ** 2 +
+                (self.Sprev[row + 1, col] + self.Sprev[row - 1, col] - 2 * self.Sprev[
+                    row, col]) / self.dy ** 2) - self.beta * self.Sprev[row, col] * self.Iprev[
+            row, col] / self.population
 
-        self.I[i + 1][0] = self.Di(self.dt) * (2 * self.I[i][1] - 2 * self.I[i][0]) / self.dx ** 2 + self.beta * \
-                           self.S[i][0] * self.I[i][0] / self.population - self.gamma * self.I[i][0]
-        if self.I[i][0] < 0:
-            self.I[i][0] = 0
-        self.I[i + 1][-1] = self.Di(self.dt) * (2 * self.I[i][-2] - 2 * self.I[i][-1]) / self.dx ** 2 + self.beta * \
-                            self.S[i][-1] * self.I[i][-1] / self.population - self.gamma * self.I[i][-1]
-        if self.I[i][-1] < 0:
-            self.I[i][-1] = 0
+    def dI2d(self, row, col, timeStep):
+        return self.Di(self.dt * timeStep) * (
+                (self.Iprev[row, col + 1] + self.Iprev[row, col - 1] - 2 * self.Iprev[row, col]) / self.dx ** 2 +
+                (self.Iprev[row + 1, col] + self.Iprev[row - 1, col] - 2 * self.Iprev[
+                    row, col]) / self.dy ** 2) + self.beta * self.Sprev[row, col] * self.Iprev[
+            row, col] / self.population - self.gamma * self.Iprev[row, col]
 
-        self.R[i + 1][0] = self.Dr(self.dt) * (2 * self.R[i][1] - 2 * self.R[i][0]) / self.dx ** 2 + self.gamma * \
-                           self.I[i][0]
-        self.R[i + 1][-1] = self.Dr(self.dt) * (2 * self.R[i][-2] - 2 * self.R[i][-1]) / self.dx ** 2 + self.gamma * \
-                            self.I[i][-1]
+    def dR2d(self, row, col, timeStep):
+        return self.Dr(self.dt * timeStep) * (
+                (self.Rprev[row, col + 1] + self.Rprev[row, col - 1] - 2 * self.Rprev[row, col]) / self.dx ** 2 +
+                (self.Rprev[row + 1, col] + self.Rprev[row - 1, col] - 2 * self.Rprev[
+                    row, col]) / self.dy ** 2) + self.gamma * self.Iprev[row, col]
+
+    def boundary2d(self):
+        self.Scur[0:self.grid.shape[0] - 1, 0] = self.Scur[0:self.grid.shape[0] - 1, 1]
+        self.Icur[0:self.grid.shape[0] - 1, 0] = self.Icur[0:self.grid.shape[0] - 1, 1]
+        self.Rcur[0:self.grid.shape[0] - 1, 0] = self.Rcur[0:self.grid.shape[0] - 1, 1]
+        self.Scur[0:self.grid.shape[0] - 1, -1] = self.Scur[self.grid.shape[0] - 1, -2]
+        self.Icur[0:self.grid.shape[0] - 1, -1] = self.Icur[self.grid.shape[0] - 1, -2]
+        self.Rcur[0:self.grid.shape[0] - 1, -1] = self.Rcur[self.grid.shape[0] - 1, -2]
+
+        self.Scur[0, 0:self.grid.shape[1] - 1] = self.Scur[0, 0:self.grid.shape[1] - 1]
+        self.Icur[0, 0:self.grid.shape[1] - 1] = self.Icur[0, 0:self.grid.shape[1] - 1]
+        self.Rcur[0, 0:self.grid.shape[1] - 1] = self.Rcur[0, 0:self.grid.shape[1] - 1]
+        self.Scur[-1, 0:self.grid.shape[1] - 1] = self.Scur[-2, self.grid.shape[1] - 1]
+        self.Icur[-1, 0:self.grid.shape[1] - 1] = self.Icur[-2, self.grid.shape[1] - 1]
+        self.Rcur[-1, 0:self.grid.shape[1] - 1] = self.Rcur[-2, self.grid.shape[1] - 1]
