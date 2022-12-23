@@ -1,21 +1,20 @@
 from models.SpreadSIRModel import SpreadSIRModel
-from models.BaseSIR import BaseSIRModel
 
 Ds = lambda t: 1 - 10 ** (-t)
-Di = lambda t: 1 - 3 ** (-t)
-Dr = lambda t: 1 - 6 ** (-t)
+Di = lambda t: 1 - 12 ** (-t)
+Dr = lambda t: 1 - 11 ** (-t)
 
-time = 100  # Days
+time = 365  # Days
 dt = 1  # Day
-areaX = 1000
 dx = 4
 dy = 4
-beta = .6  # Infectivity
-gamma = .1  # Recovery
+beta = .8  # Infectivity
+gamma = .2  # Recovery
+population = 100
 
-model = SpreadSIRModel(time, dt, beta, gamma, Ds, Di, Dr, dx, dy)
+model = SpreadSIRModel(time, dt, beta, gamma, Ds, Di, Dr, dx, dy, population)
 print('Loading image')
-model.loadImage('grid.png')
+model.loadImage('BasicGrids/grid4.png')
 print('Running Simulation')
 model.runSimulation()
 print('Done model')

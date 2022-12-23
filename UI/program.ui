@@ -7,54 +7,23 @@
                 <x>0</x>
                 <y>0</y>
                 <width>420</width>
-                <height>735</height>
+                <height>569</height>
             </rect>
         </property>
         <property name="windowTitle">
             <string>MainWindow</string>
         </property>
         <widget class="QWidget" name="centralwidget">
-            <widget class="QLabel" name="label_9">
-                <property name="geometry">
-                    <rect>
-                        <x>10</x>
-                        <y>340</y>
-                        <width>361</width>
-                        <height>31</height>
-                    </rect>
-                </property>
-                <property name="font">
-                    <font>
-                        <family>Times New Roman</family>
-                        <pointsize>12</pointsize>
-                    </font>
-                </property>
-                <property name="text">
-                    <string>Тип модели</string>
-                </property>
-                <property name="alignment">
-                    <set>Qt::AlignCenter</set>
-                </property>
-                <property name="wordWrap">
-                    <bool>false</bool>
-                </property>
-            </widget>
             <widget class="QWidget" name="layoutWidget">
                 <property name="geometry">
                     <rect>
                         <x>240</x>
-                        <y>10</y>
+                        <y>2</y>
                         <width>151</width>
-                        <height>321</height>
+                        <height>341</height>
                     </rect>
                 </property>
                 <layout class="QVBoxLayout" name="verticalLayout">
-                    <item>
-                        <widget class="QLineEdit" name="startingPopulation"/>
-                    </item>
-                    <item>
-                        <widget class="QLineEdit" name="popDeviation"/>
-                    </item>
                     <item>
                         <widget class="QLineEdit" name="time"/>
                     </item>
@@ -62,19 +31,19 @@
                         <widget class="QLineEdit" name="dt"/>
                     </item>
                     <item>
-                        <widget class="QLineEdit" name="beta"/>
+                        <widget class="QLineEdit" name="dx"/>
                     </item>
                     <item>
-                        <widget class="QLineEdit" name="gamma"/>
-                    </item>
-                    <item>
-                        <widget class="QLineEdit" name="citiesNum"/>
+                        <widget class="QLineEdit" name="dy"/>
                     </item>
                     <item>
                         <widget class="QLineEdit" name="betaDeviation"/>
                     </item>
                     <item>
                         <widget class="QLineEdit" name="gammaDeviation"/>
+                    </item>
+                    <item>
+                        <widget class="QLineEdit" name="population"/>
                     </item>
                 </layout>
             </widget>
@@ -89,7 +58,7 @@
                 </property>
                 <layout class="QVBoxLayout" name="verticalLayout_2">
                     <item>
-                        <widget class="QLabel" name="label">
+                        <widget class="QLabel" name="label_6">
                             <property name="font">
                                 <font>
                                     <family>Times New Roman</family>
@@ -97,33 +66,7 @@
                                 </font>
                             </property>
                             <property name="text">
-                                <string>Начальная популяция</string>
-                            </property>
-                        </widget>
-                    </item>
-                    <item>
-                        <widget class="QLabel" name="label_10">
-                            <property name="font">
-                                <font>
-                                    <family>Times New Roman</family>
-                                    <pointsize>12</pointsize>
-                                </font>
-                            </property>
-                            <property name="text">
-                                <string>Разброс населения</string>
-                            </property>
-                        </widget>
-                    </item>
-                    <item>
-                        <widget class="QLabel" name="label_2">
-                            <property name="font">
-                                <font>
-                                    <family>Times New Roman</family>
-                                    <pointsize>12</pointsize>
-                                </font>
-                            </property>
-                            <property name="text">
-                                <string>Время моделлирования (в днях)</string>
+                                <string>Время моделирования</string>
                             </property>
                         </widget>
                     </item>
@@ -136,7 +79,33 @@
                                 </font>
                             </property>
                             <property name="text">
-                                <string>Шаг времени (в днях)</string>
+                                <string>Шаг dt</string>
+                            </property>
+                        </widget>
+                    </item>
+                    <item>
+                        <widget class="QLabel" name="label_2">
+                            <property name="font">
+                                <font>
+                                    <family>Times New Roman</family>
+                                    <pointsize>12</pointsize>
+                                </font>
+                            </property>
+                            <property name="text">
+                                <string>Шаг dx</string>
+                            </property>
+                        </widget>
+                    </item>
+                    <item>
+                        <widget class="QLabel" name="label">
+                            <property name="font">
+                                <font>
+                                    <family>Times New Roman</family>
+                                    <pointsize>12</pointsize>
+                                </font>
+                            </property>
+                            <property name="text">
+                                <string>Шаг dy</string>
                             </property>
                         </widget>
                     </item>
@@ -167,19 +136,6 @@
                         </widget>
                     </item>
                     <item>
-                        <widget class="QLabel" name="label_6">
-                            <property name="font">
-                                <font>
-                                    <family>Times New Roman</family>
-                                    <pointsize>12</pointsize>
-                                </font>
-                            </property>
-                            <property name="text">
-                                <string>Количество городов</string>
-                            </property>
-                        </widget>
-                    </item>
-                    <item>
                         <widget class="QLabel" name="label_7">
                             <property name="font">
                                 <font>
@@ -188,20 +144,7 @@
                                 </font>
                             </property>
                             <property name="text">
-                                <string>Разброс Бета</string>
-                            </property>
-                        </widget>
-                    </item>
-                    <item>
-                        <widget class="QLabel" name="label_8">
-                            <property name="font">
-                                <font>
-                                    <family>Times New Roman</family>
-                                    <pointsize>12</pointsize>
-                                </font>
-                            </property>
-                            <property name="text">
-                                <string>Разброс Гамма</string>
+                                <string>Количество населения</string>
                             </property>
                         </widget>
                     </item>
@@ -210,8 +153,8 @@
             <widget class="QPushButton" name="pushButton">
                 <property name="geometry">
                     <rect>
-                        <x>100</x>
-                        <y>650</y>
+                        <x>90</x>
+                        <y>490</y>
                         <width>221</width>
                         <height>31</height>
                     </rect>
@@ -226,38 +169,56 @@
                     <string>Провести моделлирование</string>
                 </property>
             </widget>
-            <widget class="QWidget" name="">
+            <widget class="QPushButton" name="photoChoose">
+                <property name="geometry">
+                    <rect>
+                        <x>90</x>
+                        <y>450</y>
+                        <width>221</width>
+                        <height>31</height>
+                    </rect>
+                </property>
+                <property name="font">
+                    <font>
+                        <family>Times New Roman</family>
+                        <pointsize>12</pointsize>
+                    </font>
+                </property>
+                <property name="text">
+                    <string>Выбрать начальное поле</string>
+                </property>
+            </widget>
+            <widget class="QProgressBar" name="simulationProgress">
                 <property name="geometry">
                     <rect>
                         <x>10</x>
-                        <y>380</y>
+                        <y>360</y>
                         <width>391</width>
-                        <height>81</height>
+                        <height>23</height>
                     </rect>
                 </property>
-                <layout class="QGridLayout" name="gridLayout">
-                    <item row="0" column="0">
-                        <widget class="QRadioButton" name="BaseSIR">
-                            <property name="text">
-                                <string>Базовая SIR</string>
-                            </property>
-                        </widget>
-                    </item>
-                    <item row="1" column="0">
-                        <widget class="QRadioButton" name="MigrationSIR">
-                            <property name="text">
-                                <string>SIR с миграцией</string>
-                            </property>
-                        </widget>
-                    </item>
-                    <item row="2" column="0">
-                        <widget class="QRadioButton" name="NewtonSIR">
-                            <property name="text">
-                                <string>SIR с моделью Ньютона</string>
-                            </property>
-                        </widget>
-                    </item>
-                </layout>
+                <property name="value">
+                    <number>24</number>
+                </property>
+            </widget>
+            <widget class="QPushButton" name="pushButton_2">
+                <property name="geometry">
+                    <rect>
+                        <x>90</x>
+                        <y>412</y>
+                        <width>221</width>
+                        <height>31</height>
+                    </rect>
+                </property>
+                <property name="font">
+                    <font>
+                        <family>Times New Roman</family>
+                        <pointsize>10</pointsize>
+                    </font>
+                </property>
+                <property name="text">
+                    <string>Выбрать место сохранения видео</string>
+                </property>
             </widget>
         </widget>
         <widget class="QMenuBar" name="menubar">
